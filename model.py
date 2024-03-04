@@ -2,7 +2,7 @@ import codecs
 import json 
 from transformers import AutoTokenizer, AutoModel
 import torch
-import numpy
+import numpy as np
 
 pid2abstract = {}
 
@@ -12,19 +12,24 @@ class Model:
         self.tokenizer = AutoTokenizer.from_pretrained('allenai/specter')
         self.model = AutoModel.from_pretrained('allenai/specter')
 
-    def computeDistance(self, query, candidate):
+    def computeDistance(self, query, candidates):
         query_text = pid2abstract[query]['title'] + self.tokenizer.sep_token + " ".join(pid2abstract[query]['abstract'])
-        cand_text = pid2abstract[candidate]['title'] + self.tokenizer.sep_token + " ".join(pid2abstract[candidate]['abstract'])
+        cand_texts = np.array([pid2abstract[cpid]['title'] + self.tokenizer.sep_token + " ".join(pid2abstract[cpid]['abstract']) for cpid in candidates])
 
+        tokenize_input = np.concatenate(([query_text], cand_texts))
         # preprocess the input
-        inputs = self.tokenizer([query_text, cand_text], padding=True, truncation=True, return_tensors="pt", max_length=512)
+        inputs = self.tokenizer(tokenize_input.tolist(), padding=True, truncation=True, return_tensors="pt", max_length=512)
         with torch.no_grad():
             result = self.model(**inputs)
 
-        # take the first token in the batch as the embedding
+        # first token in the query and 
         query_embedding = result.last_hidden_state[0, 0, :]
-        cand_embedding = result.last_hidden_state[1, 0, :]
-        return numpy.linalg.norm(query_embedding-cand_embedding)
+        cand_embeddings = result.last_hidden_state[1:, 0, :]
+        
+        # Compute Euclidean distance between query embedding and each candidate embedding
+        distances = np.linalg.norm(query_embedding.unsqueeze(0) - cand_embeddings, axis=1)
+        
+        return distances.tolist()
 
 # Similar to what I did in the earlier explore.py file. For each paper id, its information
 # is stored as value in the dictionary. 
