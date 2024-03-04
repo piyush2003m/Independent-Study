@@ -6,25 +6,25 @@ import numpy
 
 pid2abstract = {}
 
-# the following function computes embedding for any pair of query and candidate documents
-# and then returns the L2 distance between the two
-def my_model(query, candidate):
-    # load model and tokenizer
-    tokenizer = AutoTokenizer.from_pretrained('allenai/specter')
-    model = AutoModel.from_pretrained('allenai/specter')
+class Model:
+    def __init__(self):
+        # load model and tokenizer
+        self.tokenizer = AutoTokenizer.from_pretrained('allenai/specter')
+        self.model = AutoModel.from_pretrained('allenai/specter')
 
-    query_text = pid2abstract[query]['title'] + tokenizer.sep_token + " ".join(pid2abstract[query]['abstract'])
-    cand_text = pid2abstract[candidate]['title'] + tokenizer.sep_token + " ".join(pid2abstract[candidate]['abstract'])
+    def computeDistance(self, query, candidate):
+        query_text = pid2abstract[query]['title'] + self.tokenizer.sep_token + " ".join(pid2abstract[query]['abstract'])
+        cand_text = pid2abstract[candidate]['title'] + self.tokenizer.sep_token + " ".join(pid2abstract[candidate]['abstract'])
 
-    # preprocess the input
-    inputs = tokenizer([query_text, cand_text], padding=True, truncation=True, return_tensors="pt", max_length=512)
-    with torch.no_grad():
-        result = model(**inputs)
+        # preprocess the input
+        inputs = self.tokenizer([query_text, cand_text], padding=True, truncation=True, return_tensors="pt", max_length=512)
+        with torch.no_grad():
+            result = self.model(**inputs)
 
-    # take the first token in the batch as the embedding
-    query_embedding = result.last_hidden_state[0, 0, :]
-    cand_embedding = result.last_hidden_state[1, 0, :]
-    return numpy.linalg.norm(query_embedding-cand_embedding)
+        # take the first token in the batch as the embedding
+        query_embedding = result.last_hidden_state[0, 0, :]
+        cand_embedding = result.last_hidden_state[1, 0, :]
+        return numpy.linalg.norm(query_embedding-cand_embedding)
 
 # Similar to what I did in the earlier explore.py file. For each paper id, its information
 # is stored as value in the dictionary. 
@@ -39,13 +39,18 @@ with codecs.open('test-pid2anns-csfcube-background.json', 'r', 'utf-8') as fp:
 
 # Rank the candidates per query.
 qpid2pool_ranked = {}
+my_model = Model()
+i = 0
 for qpid in qpid2pool.keys():
+    i += 1
+    if i == 4:
+        break
     # Get the paper-ids for candidates.
     cand_pids = qpid2pool[qpid]['cands']
     # Compute the distance between a query and candidate.
     query_cand_distance = []
     for cpid in cand_pids:
-        dist = my_model(qpid, cpid)
+        dist = my_model.computeDistance(qpid, cpid)
         query_cand_distance.append((cpid, dist))
     # Sort the candidates in predicted rank order - smallest to largest distances.
     ranked_pool = list(sorted(query_cand_distance, key=lambda cd: cd[1]))
