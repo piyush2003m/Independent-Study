@@ -40,11 +40,7 @@ with codecs.open('test-pid2anns-csfcube-background.json', 'r', 'utf-8') as fp:
 # Rank the candidates per query.
 qpid2pool_ranked = {}
 my_model = Model()
-i = 0
 for qpid in qpid2pool.keys():
-    i += 1
-    if i == 4:
-        break
     # Get the paper-ids for candidates.
     cand_pids = qpid2pool[qpid]['cands']
     # Compute the distance between a query and candidate.
