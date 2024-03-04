@@ -49,10 +49,8 @@ for qpid in qpid2pool.keys():
     # Get the paper-ids for candidates.
     cand_pids = qpid2pool[qpid]['cands']
     # Compute the distance between a query and candidate.
-    query_cand_distance = []
-    for cpid in cand_pids:
-        dist = my_model.computeDistance(qpid, cpid)
-        query_cand_distance.append((cpid, dist))
+    dist_list = my_model.computeDistance(qpid, cand_pids)
+    query_cand_distance = [(cpid, dist) for cpid, dist in zip(cand_pids, dist_list)] 
     # Sort the candidates in predicted rank order - smallest to largest distances.
     ranked_pool = list(sorted(query_cand_distance, key=lambda cd: cd[1]))
     qpid2pool_ranked[qpid] = ranked_pool
