@@ -7,10 +7,14 @@ import numpy as np
 pid2abstract = {}
 
 class Model:
-    def __init__(self):
+    def __init__(self, model):
         # load model and tokenizer
-        self.tokenizer = AutoTokenizer.from_pretrained('allenai/specter')
-        self.model = AutoModel.from_pretrained('allenai/specter')
+        if model == "specter":
+            self.tokenizer = AutoTokenizer.from_pretrained('allenai/specter')
+            self.model = AutoModel.from_pretrained('allenai/specter')
+        elif model == "scincl":
+            self.tokenizer = AutoTokenizer.from_pretrained('malteos/scincl')
+            self.model = AutoModel.from_pretrained('malteos/scincl')
 
     def computeDistance(self, query, candidates):
         query_text = pid2abstract[query]['title'] + self.tokenizer.sep_token + " ".join(pid2abstract[query]['abstract'])
@@ -38,35 +42,85 @@ with codecs.open('abstracts-csfcube-preds.jsonl', 'r', 'utf-8') as absfile:
         injson = json.loads(line.strip())
         pid2abstract[injson['paper_id']] = injson
 
-# Read in pools for the queries per facet.
-with codecs.open('test-pid2anns-csfcube-background.json', 'r', 'utf-8') as fp:
-    qpid2pool = json.load(fp)
+facets = ["background", "method", "result"]
+models = ["specter"] # "scincl", 
+
+for model in models:
+    for facet in facets:
+        fileName = f"gold/test-pid2anns-csfcube-{facet}.json"
+        with codecs.open(fileName, 'r', 'utf-8') as fp:
+            qpid2pool = json.load(fp)
+        # Rank the candidates per query.
+        qpid2pool_ranked = {}
+        my_model = Model(model)
+        for qpid in qpid2pool.keys():
+            # Get the paper-ids for candidates
+            cand_pids = qpid2pool[qpid]['cands']
+            # Compute the distance between a query and candidate.
+            dist_list = my_model.computeDistance(qpid, cand_pids)
+            query_cand_distance = [(cpid, dist) for cpid, dist in zip(cand_pids, dist_list)] 
+            # Sort the candidates in predicted rank order - smallest to largest distances.
+            ranked_pool = list(sorted(query_cand_distance, key=lambda cd: cd[1]))
+            qpid2pool_ranked[qpid] = ranked_pool
+
+        qpid2pool_ranked_serializable = {
+            key: [(cpid, float(dist)) for cpid, dist in value]
+            for key, value in qpid2pool_ranked.items()
+        }
+
+        outputFileName = f"ranked/{model}/test-pid2pool-csfcube-{model}-{facet}-ranked.json"
+        with open(outputFileName, 'w') as json_file:
+            json.dump(qpid2pool_ranked_serializable, json_file)
+
+# Background
+# with codecs.open('gold/test-pid2anns-csfcube-background.json', 'r', 'utf-8') as fp:
+#     qpid2pool = json.load(fp)
+
+# Method
+# with codecs.open('gold/test-pid2anns-csfcube-method.json', 'r', 'utf-8') as fp:
+#     qpid2pool = json.load(fp)
+
+# Result
+# with codecs.open('gold/test-pid2anns-csfcube-result.json', 'r', 'utf-8') as fp:
+#     qpid2pool = json.load(fp)
 
 # Rank the candidates per query.
-qpid2pool_ranked = {}
-my_model = Model()
-for qpid in qpid2pool.keys():
-    # Get the paper-ids for candidates.
-    cand_pids = qpid2pool[qpid]['cands']
-    # Compute the distance between a query and candidate.
-    dist_list = my_model.computeDistance(qpid, cand_pids)
-    query_cand_distance = [(cpid, dist) for cpid, dist in zip(cand_pids, dist_list)] 
-    # Sort the candidates in predicted rank order - smallest to largest distances.
-    ranked_pool = list(sorted(query_cand_distance, key=lambda cd: cd[1]))
-    qpid2pool_ranked[qpid] = ranked_pool
+# qpid2pool_ranked = {}
+# my_model = Model("scincl")
+# for qpid in qpid2pool.keys():
+#     # Get the paper-ids for candidates.
+#     cand_pids = qpid2pool[qpid]['cands']
+#     # Compute the distance between a query and candidate.
+#     dist_list = my_model.computeDistance(qpid, cand_pids)
+#     query_cand_distance = [(cpid, dist) for cpid, dist in zip(cand_pids, dist_list)] 
+#     # Sort the candidates in predicted rank order - smallest to largest distances.
+#     ranked_pool = list(sorted(query_cand_distance, key=lambda cd: cd[1]))
+#     qpid2pool_ranked[qpid] = ranked_pool
 
-# with codecs.open('test-pid2pool-csfcube-my_model-background-ranked.json', 'w', 'utf-8') as fp:
-#     json.dump(qpid2pool_ranked, fp)
-
-qpid2pool_ranked_serializable = {
-    key: [(cpid, float(dist)) for cpid, dist in value]
-    for key, value in qpid2pool_ranked.items()
-}
+# qpid2pool_ranked_serializable = {
+#     key: [(cpid, float(dist)) for cpid, dist in value]
+#     for key, value in qpid2pool_ranked.items()
+# }
 
 # Dump the object into a JSON file
-with open('test-pid2pool-csfcube-my_model-background-ranked.json', 'w') as json_file:
-    json.dump(qpid2pool_ranked_serializable, json_file)
+# Specter
+# Background
+# with open('ranked/test-pid2pool-csfcube-specter-background-ranked.json', 'w') as json_file:
+#     json.dump(qpid2pool_ranked_serializable, json_file)
 
-# with open('test-pid2pool-csfcube-my_model-background-ranked.json', "w") as json_file:
-#     # Write the JSON object to the file
-#     json.dump(qpid2pool_ranked, json_file)
+# Method
+# with open('ranked/test-pid2pool-csfcube-specter-method-ranked.json', 'w') as json_file:
+#     json.dump(qpid2pool_ranked_serializable, json_file)
+
+# Result
+# with open('ranked/test-pid2pool-csfcube-specter-result-ranked.json', 'w') as json_file:
+#     json.dump(qpid2pool_ranked_serializable, json_file)
+
+# Scincl
+# Background
+# with open('ranked/test-pid2pool-csfcube-scincl-background-ranked.json', 'w') as json_file:
+#     json.dump(qpid2pool_ranked_serializable, json_file)
+
+# Method
+# with open('ranked/test-pid2pool-csfcube-scincl-method-ranked.json', 'w') as json_file:
+#     json.dump(qpid2pool_ranked_serializable, json_file)

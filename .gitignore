@@ -1,0 +1,11 @@
+# Ignore directories
+ranked/
+Test/
+
+# Ignore specific files
+abstracts-preds.json
+800kRanked.json
+abstracts-csfcube-preds.jsonl
+
+# Ignore all files with .json extension
+*.json
