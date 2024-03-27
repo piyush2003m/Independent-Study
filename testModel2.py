@@ -20,6 +20,11 @@ class Model:
         elif model == "scincl":
             self.tokenizer = AutoTokenizer.from_pretrained('malteos/scincl')
             self.model = AutoModel.from_pretrained('malteos/scincl')
+        self.doc_encoder = AutoModel.from_pretrained('allenai/specter')
+        self.doc_encoder.eval()
+        # Move model to the GPU.
+        if torch.cuda.is_available():
+            self.doc_encoder.cuda()
 
     def embed(self, batch_text):
         """
@@ -56,13 +61,11 @@ class Model:
                 batch_docs = []
                 doc_embeddings[batch_start_idx:batch_start_idx+batch_size, :] = batch_reps
                 batch_start_idx = batch_start_idx+batch_size
-            if doci == 400:
-                break
-        # Handle left over sentences in doc_text.
-        # if len(batch_docs) > 0:
-        #     batch_reps = self.embed(batch_docs)
-        #     final_bsize = batch_reps.shape[0]
-        #     doc_embeddings[batch_start_idx:batch_start_idx + final_bsize, :] = batch_reps
+            # Handle left over sentences in doc_text.
+            if len(batch_docs) > 0:
+                batch_reps = self.embed(batch_docs)
+                final_bsize = batch_reps.shape[0]
+                doc_embeddings[batch_start_idx:batch_start_idx + final_bsize, :] = batch_reps
         return doc_embeddings
     
     def execute(self):
@@ -81,6 +84,8 @@ class Model:
                 doc_text.append(cur_doc)
                 int_idx2pid[i] = paper_id
                 i+= 1
+                if i == 10000:
+                    break
             doc_embeds = self.embed_text(doc_text)
 
             # initialize a nearest neighbor data structure for retriving 200 documents with L2 distance
@@ -121,6 +126,6 @@ resJSON_serializable = {
     for key, value in resJSON.items()
 }
 
-outputFileName = f"800kRanked.json"
+outputFileName = f"10kRanked.json"
 with open(outputFileName, 'w') as json_file:
     json.dump(resJSON_serializable, json_file)

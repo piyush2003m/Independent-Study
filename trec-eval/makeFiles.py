@@ -93,7 +93,7 @@ def createGoldFile(facet):
                 qpid = qpid.replace("_method", "")
                 qpid = qpid.replace("_result", "")
                 for i in range(len(qpid2pool[qpid]['cands'])):
-                    line = f"{qpid} 0 {qpid2pool[qpid]['cands'][i]} {qpid2pool[qpid]['relevance_adju'][i]}\n"
+                    line = f"{qpid}\t0\t{qpid2pool[qpid]['cands'][i]}\t{qpid2pool[qpid]['relevance_adju'][i]}\n"
                     tsv_file.write(line)
 '''
 The predictions file needs to be tsv file also. Im sending you a function to write this out. 
@@ -118,7 +118,7 @@ def createRankedFile(facet, model):
                 qpid = qpid.replace("_result", "")
                 for i in range(len(qpid2pool[qpid])):
                     similarity = 1 / (1 + qpid2pool[qpid][i][1])
-                    line = f"{qpid} {qpid2pool[qpid][i][0]} {i+1} {similarity} {model}\n"
+                    line = f"{qpid}\tQ0\t{qpid2pool[qpid][i][0]}\t{i+1}\t{similarity}\t{model}\n"
                     tsv_file.write(line)
     
 
