@@ -1,5 +1,5 @@
 import codecs
-import json 
+import json
 from transformers import AutoTokenizer, AutoModel
 import torch
 import numpy as np
@@ -22,7 +22,6 @@ class Model:
             self.model = AutoModel.from_pretrained('malteos/scincl')
         self.doc_encoder = AutoModel.from_pretrained('allenai/specter')
         self.doc_encoder.eval()
-        # Move model to the GPU.
         if torch.cuda.is_available():
             self.doc_encoder.cuda()
 
@@ -30,7 +29,8 @@ class Model:
         """
         Do a forward pass through the encoder and get embeddings.
         """
-        inputs = self.tokenizer(batch_text, padding=True, truncation=True, 
+        print(batch_text)
+        inputs = self.tokenizer(batch_text, padding=True, truncation=True,
                            return_tensors="pt", return_token_type_ids=False, max_length=512)
         # Move the data to the GPU.
         if torch.cuda.is_available():
@@ -41,7 +41,7 @@ class Model:
             output = self.model(**inputs)
         embeddings = output.last_hidden_state[:, 0, :]
         return embeddings.cpu().numpy()
-
+    
     def embed_text(self, doc_text, batch_size=16):
         """
         Embed and return the docs.
@@ -79,19 +79,20 @@ class Model:
                 json_data = data[key]
                 paper_id = json_data['paper_id']
                 title = json_data['title']
-                abstract = json_data['abstract']
+                abstract = "".join(json_data['abstract'])
                 cur_doc = f"{title} {self.tokenizer.sep_token} {abstract}"
                 doc_text.append(cur_doc)
                 int_idx2pid[i] = paper_id
                 i+= 1
-                if i == 10000:
+                # break at 10k documents
+                if i == 500:
                     break
             doc_embeds = self.embed_text(doc_text)
 
             # initialize a nearest neighbor data structure for retriving 200 documents with L2 distance
             document_neighbor_index = NearestNeighbors(n_neighbors=200, metric='minkowski', p=2)
             document_neighbor_index.fit(doc_embeds)
-            
+
             query_text = []
             query_ids = []
             # choose facet
@@ -126,6 +127,6 @@ resJSON_serializable = {
     for key, value in resJSON.items()
 }
 
-outputFileName = f"10kRanked.json"
+outputFileName = f"800kRanked.json"
 with open(outputFileName, 'w') as json_file:
     json.dump(resJSON_serializable, json_file)
