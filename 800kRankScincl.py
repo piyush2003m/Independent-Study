@@ -20,16 +20,14 @@ class Model:
         elif model == "scincl":
             self.tokenizer = AutoTokenizer.from_pretrained('malteos/scincl')
             self.model = AutoModel.from_pretrained('malteos/scincl')
-        self.doc_encoder = AutoModel.from_pretrained('allenai/specter')
-        self.doc_encoder.eval()
+        self.model.eval()
         if torch.cuda.is_available():
-            self.doc_encoder.cuda()
+            self.model.cuda()
 
     def embed(self, batch_text):
         """
         Do a forward pass through the encoder and get embeddings.
         """
-        print(batch_text)
         inputs = self.tokenizer(batch_text, padding=True, truncation=True,
                            return_tensors="pt", return_token_type_ids=False, max_length=512)
         # Move the data to the GPU.
@@ -68,7 +66,7 @@ class Model:
                 doc_embeddings[batch_start_idx:batch_start_idx + final_bsize, :] = batch_reps
         return doc_embeddings
     
-    def execute(self):
+    def fullEmbed(self):
         with open('abstracts-preds.json', 'r') as file:
             data = json.load(file)
             int_idx2pid = {}
@@ -85,48 +83,57 @@ class Model:
                 int_idx2pid[i] = paper_id
                 i+= 1
                 # break at 10k documents
-                if i == 500:
-                    break
+                # if i == 500:
+                #    break
             doc_embeds = self.embed_text(doc_text)
 
-            # initialize a nearest neighbor data structure for retriving 200 documents with L2 distance
-            document_neighbor_index = NearestNeighbors(n_neighbors=200, metric='minkowski', p=2)
-            document_neighbor_index.fit(doc_embeds)
+            doc_embeds_serializable = doc_embeds.tolist()
+            # Save doc_embeds to a JSON file
+            with open('doc_embeds_scincl.json', 'w') as json_file:
+                json.dump(doc_embeds_serializable, json_file)
 
-            query_text = []
-            query_ids = []
-            # choose facet
-            facet = "background"
-            fileName = f"gold/test-pid2anns-csfcube-{facet}.json"
-            with codecs.open(fileName, 'r', 'utf-8') as fp:
-                qpid2pool = json.load(fp)
-                for qpid in qpid2pool.keys():
-                    cur_query = pid2abstract[qpid]['title'] + " " + self.tokenizer.sep_token + " ".join(pid2abstract[qpid]['abstract'])
-                    query_text.append(cur_query)
-                    query_ids.append(qpid)
-            # now embed the queries
-            query_embeds = self.embed_text(query_text)
+            return doc_embeds, int_idx2pid
+        
+    def NN(self, doc_embeds, facet):
+        # initialize a nearest neighbor data structure for retriving 200 documents with L2 distance
+        document_neighbor_index = NearestNeighbors(n_neighbors=200, metric='minkowski', p=2)
+        document_neighbor_index.fit(doc_embeds)
 
-            # retrieve the nearest neighbors for all queries at once (sklearn implements batching internally)
-            # neighbor_distances will be shape: num_queries x 200
-            # neighbor_indexes: of shape num_queries x 200, will be the integer index of the neighbor document in doc_embeds. You can retrieve the pid using int_idx2pid
-            neighbor_distances, neighbor_indexes = document_neighbor_index.kneighbors(query_embeds)
-            return neighbor_distances, neighbor_indexes, query_ids, int_idx2pid
+        query_text = []
+        query_ids = []
+        fileName = f"gold/test-pid2anns-csfcube-{facet}.json"
+        with codecs.open(fileName, 'r', 'utf-8') as fp:
+            qpid2pool = json.load(fp)
+            for qpid in qpid2pool.keys():
+                cur_query = pid2abstract[qpid]['title'] + " " + self.tokenizer.sep_token + " ".join(pid2abstract[qpid]['abstract'])
+                query_text.append(cur_query)
+                query_ids.append(qpid)
+        # now embed the queries
+        query_embeds = self.embed_text(query_text)
+
+        # retrieve the nearest neighbors for all queries at once (sklearn implements batching internally)
+        # neighbor_distances will be shape: num_queries x 200
+        # neighbor_indexes: of shape num_queries x 200, will be the integer index of the neighbor document in doc_embeds. You can retrieve the pid using int_idx2pid
+        neighbor_distances, neighbor_indexes = document_neighbor_index.kneighbors(query_embeds)
+        return neighbor_distances, neighbor_indexes, query_ids
 
 resJSON = {}
-model = Model("specter")
-neighbor_distances, neighbor_indexes, query_ids, int_idx2pid = model.execute()
-for i in range(len(query_ids)):
-    neighbor_indexes[i] = [int_idx2pid[elem] for elem in neighbor_indexes[i]]
-    IndexAndDist = list(zip(neighbor_indexes[i], neighbor_distances[i]))
-    ranked_pool = list(sorted(IndexAndDist, key=lambda x: x[1]))
-    resJSON[query_ids[i]] = ranked_pool
+model = Model("scincl")
+doc_embeds, int_idx2pid = model.fullEmbed()
+facets = ["background", "method", "result"]
+for facet in facets:
+    neighbor_distances, neighbor_indexes, query_ids = model.NN(doc_embeds, facet)
+    for i in range(len(query_ids)):
+        neighbor_indexes[i] = [int_idx2pid[elem] for elem in neighbor_indexes[i]]
+        IndexAndDist = list(zip(neighbor_indexes[i], neighbor_distances[i]))
+        ranked_pool = list(sorted(IndexAndDist, key=lambda x: x[1]))
+        resJSON[query_ids[i]] = ranked_pool
 
-resJSON_serializable = {
-    key: [(int(cpid), float(dist)) for cpid, dist in value]
-    for key, value in resJSON.items()
-}
+    resJSON_serializable = {
+        key: [(int(cpid), float(dist)) for cpid, dist in value]
+        for key, value in resJSON.items()
+    }
 
-outputFileName = f"800kRanked.json"
-with open(outputFileName, 'w') as json_file:
-    json.dump(resJSON_serializable, json_file)
+    outputFileName = f"800k-{facet}-scincl.json"
+    with open(outputFileName, 'w') as json_file:
+        json.dump(resJSON_serializable, json_file)
