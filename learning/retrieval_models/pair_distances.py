@@ -22,6 +22,9 @@ def rank_candidates(query_embeds, cpid2candidate_embeds, aggregation_method, dis
     for pid in cpid2candidate_embeds:
         sent_reps = cpid2candidate_embeds[pid]
         # Compute pairwise distances for
+        if query_embeds.shape[1] != sent_reps.shape[1]:
+            print(query_embeds.shape)
+            print(sent_reps.shape)
         pair_dists = spatial.distance.cdist(query_embeds, sent_reps)
         # Compute a mask which selects a subset of pair_dists
         if aggregation_method == 'optimal_transport':

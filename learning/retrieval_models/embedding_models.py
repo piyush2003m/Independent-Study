@@ -14,7 +14,10 @@ from torch.autograd import Variable
 from transformers import AutoModel, AutoTokenizer
 from adapters import AutoAdapterModel
 
-from .. import batchers
+import sys
+sys.path.append('../batchers_dir')
+
+from batchers_dir import batchers
 
 
 class ContextualSentenceEmbedder(nn.Module):
